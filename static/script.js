@@ -38,12 +38,15 @@ async function generate() {
 
     const btn = event?.target;
     const originalText = btn?.innerText || "Generate Content";
+    const screenplayEl = document.getElementById("screenplay");
     
     try {
         if (btn) {
             btn.innerText = "⏳ Generating...";
             btn.disabled = true;
         }
+        
+        screenplayEl.innerText = "🎬 Streaming response...\n";
         
         console.log("Sending request to /generate_story with storyline:", storyline.substring(0, 50) + "...");
         
@@ -59,6 +62,7 @@ async function generate() {
             const errorMsg = await res.text();
             console.error("Server error:", res.status, errorMsg);
             alert("Error " + res.status + ": " + errorMsg);
+            screenplayEl.innerText = "❌ Error: " + errorMsg;
             if (btn) {
                 btn.innerText = originalText;
                 btn.disabled = false;
@@ -66,16 +70,35 @@ async function generate() {
             return;
         }
 
-        const data = await res.json();
-        console.log("JSON parsed, data:", data);
-
-        if (data.screenplay) {
-            console.log("Setting screenplay text, length:", data.screenplay.length);
-            document.getElementById("screenplay").innerText = data.screenplay;
-        } else {
-            console.warn("No screenplay in response");
-            document.getElementById("screenplay").innerText = "No screenplay generated";
+        // Handle streaming response (Server-Sent Events)
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        screenplayEl.innerText = "";
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.text) {
+                            screenplayEl.innerText += data.text;
+                            // Auto-scroll to bottom
+                            screenplayEl.scrollTop = screenplayEl.scrollHeight;
+                        }
+                    } catch (e) {
+                        console.warn("Could not parse SSE data:", line);
+                    }
+                }
+            }
         }
+        
+        console.log("Streaming complete");
         
         if (btn) {
             btn.innerText = originalText;
@@ -84,6 +107,7 @@ async function generate() {
     } catch (e) {
         console.error("Generate catch error:", e.message, e.stack);
         alert("Error: " + e.message + "\n\nMake sure Flask and Ollama are running!");
+        screenplayEl.innerText = "❌ Error: " + e.message;
         if (btn) {
             btn.innerText = originalText;
             btn.disabled = false;
