@@ -15,8 +15,24 @@ def call_ollama(prompt):
         "stream": False
     }
 
-    response = requests.post(url, json=payload)
-    return response.json()["response"]
+    try:
+        print(f"[OLLAMA] Calling Ollama at {url}")
+        response = requests.post(url, json=payload, timeout=120)
+        print(f"[OLLAMA] Status: {response.status_code}")
+        result = response.json()["response"]
+        print(f"[OLLAMA] Response length: {len(result)}")
+        return result
+    except requests.exceptions.ConnectionError as e:
+        print(f"[ERROR] Cannot connect to Ollama at {url}")
+        raise Exception("Cannot connect to Ollama. Is it running at localhost:11434?")
+    except Exception as e:
+        print(f"[ERROR] Ollama error: {str(e)}")
+        raise
+
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"}), 200
 
 
 @app.route('/')
@@ -45,55 +61,24 @@ def dashboard():
 
 @app.route('/generate_story', methods=['POST'])
 def generate_story():
-    data = request.json
-    storyline = data.get("storyline", "")
+    try:
+        data = request.json
+        storyline = data.get("storyline", "")
 
-    if not storyline:
-        return jsonify({"error": "Storyline missing"}), 400
+        if not storyline:
+            return jsonify({"error": "Storyline missing"}), 400
 
+        print(f"[GENERATE] Received: {storyline[:50]}...")
+        
+        prompt = f"Write a short cinematic screenplay with scene heading and dialogue:\n{storyline}"
+        print(f"[GENERATE] Calling Ollama...")
+        screenplay = call_ollama(prompt)
+        print(f"[GENERATE] Got response: {len(screenplay)} chars")
 
-    # ---------- SCREENPLAY ----------
-    screenplay_prompt = f"""
-You are a cinematic screenplay writer.
-
-Write a short screenplay with scene heading, action and dialogue.
-
-Story:
-{storyline}
-"""
-    screenplay = call_ollama(screenplay_prompt)
-
-
-    # ---------- CHARACTERS ----------
-    character_prompt = f"""
-Based on this story, create detailed character profiles with
-background, personality and motivation.
-
-Story:
-{storyline}
-"""
-    characters = call_ollama(character_prompt)
-
-
-    # ---------- SOUND DESIGN ----------
-    sound_prompt = f"""
-Suggest cinematic background music and sound design for each major scene.
-
-Story:
-{storyline}
-"""
-    sound = call_ollama(sound_prompt)
-
-
-    session["screenplay"] = screenplay
-    session["characters"] = characters
-    session["sound"] = sound
-
-    return jsonify({
-        "screenplay": screenplay,
-        "characters": characters,
-        "sound": sound
-    })
+        return jsonify({"screenplay": screenplay})
+    except Exception as e:
+        print(f"[ERROR] Generate failed: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

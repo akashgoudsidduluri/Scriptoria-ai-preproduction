@@ -1,20 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Dashboard</title>
+    <title>Dashboard - Scriptoria</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<h2>Welcome {{username}}</h2>
+<div class="dashboard">
+    <a href="/" class="back-link">← Back</a>
+    <h2 class="welcome">Welcome {{username}}</h2>
 
-<textarea id="story" placeholder="Write story idea..."></textarea>
-<br><br>
+    <div class="input-section">
+        <h1>Enter Your Story Idea</h1>
+        <textarea id="story" placeholder="Write your story idea here..."></textarea>
+        <button class="cta" onclick="generate()">Generate Content</button>
+    </div>
 
-<button onclick="generate()">Generate</button>
+    <div class="results">
+        <div class="result-box">
+            <h3>Screenplay</h3>
+            <pre id="screenplay"></pre>
+        </div>
+    </div>
 
-<pre id="screenplay"></pre>
-<pre id="characters"></pre>
-<pre id="sound"></pre>
+    <div class="download-section">
+        <button onclick="download('txt')">Download TXT</button>
+        <button onclick="download('pdf')">Download PDF</button>
+        <button onclick="download('docx')">Download DOCX</button>
+    </div>
+</div>
 
 <script src="/static/script.js"></script>
 </body>

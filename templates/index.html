@@ -1,14 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Scriptoria</title>
+    <title>Scriptoria - AI Storyboard & Script Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<h1>Scriptoria</h1>
+<div class="landing">
+    <div class="overlay"></div>
+    <div class="landing-content">
+        <h1>AI Storyboard & Script Generator</h1>
+        <p class="tagline">Cinema, Cinema, Cinema</p>
+        <button class="cta" onclick="showModal()">Let's dive in to Cinema</button>
+    </div>
+</div>
 
-<input id="username" placeholder="Enter name">
-<button onclick="enter()">Enter</button>
+<div id="modal" class="modal">
+    <div class="modal-box">
+        <span class="close" onclick="closeModal()">×</span>
+        <h2>Welcome to Cinema World!</h2>
+        <p>Please tell us your name:</p>
+        <input id="username" placeholder="Enter your name" autofocus>
+        <button class="cta" onclick="enter()">Continue</button>
+    </div>
+</div>
 
 <script src="/static/script.js"></script>
 </body>
