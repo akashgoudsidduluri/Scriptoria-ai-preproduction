@@ -49,6 +49,8 @@ def generate_title(prompt_text):
 # Ollama helpers
 # ─────────────────────────────────────────────────────────────
 
+import time
+
 def call_ollama_stream(prompt):
     """Call Ollama with streaming enabled – yields text chunks as they arrive."""
     url = "http://localhost:11434/api/generate"
@@ -58,16 +60,23 @@ def call_ollama_stream(prompt):
         "stream": True
     }
     try:
-        print(f"[OLLAMA-STREAM] Calling Ollama at {url}")
+        start_time = time.time()
+        print(f"[OLLAMA] Request sent at {time.strftime('%H:%M:%S')}")
         response = requests.post(url, json=payload, timeout=180, stream=True)
+        
+        first_chunk = True
         for line in response.iter_lines():
             if line:
+                if first_chunk:
+                    print(f"[OLLAMA] First chunk received in {time.time() - start_time:.2f}s")
+                    first_chunk = False
                 try:
                     chunk = json.loads(line)
                     if "response" in chunk:
                         yield chunk["response"]
                 except json.JSONDecodeError:
                     pass
+        print(f"[OLLAMA] Total stream duration: {time.time() - start_time:.2f}s")
     except requests.exceptions.ConnectionError:
         yield "ERROR: Cannot connect to Ollama. Is it running at localhost:11434?"
     except Exception as e:
@@ -96,6 +105,7 @@ def dashboard():
 
 @app.route('/generate_story', methods=['POST'])
 def generate_story():
+    total_start = time.time()
     try:
         data = request.get_json(silent=True) or {}
         storyline = data.get("storyline", "").strip()
@@ -103,7 +113,6 @@ def generate_story():
         if not storyline:
             return jsonify({"error": "Storyline missing"}), 400
 
-        # Capture user_id upfront to prevent session context loss in generator
         user_id_fixed = session.get("user_id")
 
         prompt = f"""Write a short cinematic screenplay with:
@@ -115,29 +124,28 @@ def generate_story():
 Story idea:
 {storyline}"""
 
-        print(f"[GENERATE] Starting stream for User {user_id_fixed}")
+        print(f"\n[STORY START] user: {user_id_fixed}")
 
         def generate():
             full_text = ""
-            # Stream the story
             for chunk in call_ollama_stream(prompt):
                 full_text += chunk
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
 
             # After generation, save to database and send metadata
-            # This allows the frontend to update sidebar with ZERO extra HTTP requests
             if user_id_fixed and full_text and not full_text.startswith("ERROR:"):
+                db_start = time.time()
                 try:
                     title = generate_title(storyline)
-                    print(f"[DB] Persisting story: '{title}'")
                     item = save_chat(user_id_fixed, storyline, full_text, title=title)
+                    print(f"[DB] Save + Title Title: {time.time() - db_start:.2f}s")
                     
                     if item:
-                        # Yield special metadata chunk
                         yield f"data: {json.dumps({'metadata': item})}\n\n"
-                        print(f"[DB SUCCESS] Metadata sent for: {item.get('id')}")
                 except Exception as db_err:
-                    print(f"[DB ERROR] Save failed: {db_err}")
+                    print(f"[DB ERROR] Save failed in {time.time() - db_start:.2f}s: {db_err}")
+            
+            print(f"[STORY COMPLETE] Total Time: {time.time() - total_start:.2f}s\n")
 
         return Response(generate(), mimetype='text/event-stream')
 

@@ -4,9 +4,18 @@ Optimized for Performance: Uses session-cookie identity to minimize DB round-tri
 """
 
 import uuid
+import time
+import os
 from functools import wraps
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# Debug: Check for proxy settings that often cause 30s timeouts on Windows
+proxies = {k: v for k, v in os.environ.items() if "PROXY" in k.upper()}
+if proxies:
+    print(f"[AUTH DEBUG] Proxy environment detected: {proxies}")
+else:
+    print("[AUTH DEBUG] No proxy environment detected.")
 from database import (
     create_user,
     get_user_by_email,
@@ -56,6 +65,7 @@ def register():
     Body: { "username": "...", "email": "...", "password": "..." }
     PERFORMANCE: Trusts DB constraints for uniqueness; removes separate lookups.
     """
+    route_start = time.time()
     data = request.get_json()
     username = (data.get("username") or "").strip()
     email    = (data.get("email") or "").strip().lower()
@@ -67,11 +77,6 @@ def register():
 
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters"}), 400
-
-    # PERFORMANCE WIN: 
-    # We removed 'if get_user_by_email...' and 'if get_user_by_username...'
-    # We let the database attempt the insert. If it fails due to UNIQUE constraint,
-    # we catch the exception. 2 DB calls removed here.
 
     password_hash = generate_password_hash(password)
     
@@ -88,7 +93,6 @@ def register():
 
     # Auto-login: Create a new session token
     token = str(uuid.uuid4())
-    # Note: create_session remains a single write to Supabase
     create_session(user["id"], token)
 
     # Store FULL identity in Flask server-side session (signed cookie)
@@ -97,6 +101,7 @@ def register():
     session["username"]      = user["username"]
     session["email"]         = user["email"]
 
+    print(f"[AUTH] register route total time: {time.time() - route_start:.2f}s")
     return jsonify({
         "success": True,
         "username": user["username"],
@@ -112,6 +117,7 @@ def login():
     """
     Body: { "email": "...", "password": "..." }
     """
+    route_start = time.time()
     data = request.get_json()
     email    = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -134,6 +140,7 @@ def login():
     session["username"]      = user["username"]
     session["email"]         = user["email"]
 
+    print(f"[AUTH] login route total time: {time.time() - route_start:.2f}s")
     return jsonify({"success": True, "username": user["username"]}), 200
 
 
