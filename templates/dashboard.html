@@ -1,35 +1,56 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Dashboard - Scriptoria</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
-<div class="dashboard">
-    <a href="/" class="back-link">← Back</a>
-    <h2 class="welcome">Welcome {{username}}</h2>
+    <div class="app-container">
+        <aside class="sidebar glass">
+            <div class="sidebar-header">
+                <h3>History</h3>
+                <button class="new-btn" onclick="newStory()">+ New Story</button>
+            </div>
+            <div id="history-list" class="history-list">
+                <p class="loading-text">Loading past stories...</p>
+            </div>
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </aside>
 
-    <div class="input-section">
-        <h1>Enter Your Story Idea</h1>
-        <textarea id="story" placeholder="Write your story idea here..."></textarea>
-        <button class="cta" onclick="generate()">Generate Content</button>
+        <main class="dashboard-main">
+            <div class="dashboard-header">
+                <h2 class="welcome">Welcome {{username}}</h2>
+            </div>
+
+            <div class="content-wrapper">
+                <div class="input-section glass">
+                    <h1>Enter Your Story Idea</h1>
+                    <textarea id="story" placeholder="Write your story idea here..."></textarea>
+                    <button class="cta" onclick="generate(event)">Generate Content</button>
+                </div>
+
+                <div class="results">
+                    <div class="result-box glass">
+                        <h3>Screenplay</h3>
+                        <pre id="screenplay"></pre>
+                    </div>
+                </div>
+
+                <div class="download-section">
+                    <button onclick="download('txt')">TXT</button>
+                    <button onclick="download('pdf')">PDF</button>
+                    <button onclick="download('docx')">DOCX</button>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <div class="results">
-        <div class="result-box">
-            <h3>Screenplay</h3>
-            <pre id="screenplay"></pre>
-        </div>
-    </div>
-
-    <div class="download-section">
-        <button onclick="download('txt')">Download TXT</button>
-        <button onclick="download('pdf')">Download PDF</button>
-        <button onclick="download('docx')">Download DOCX</button>
-    </div>
-</div>
-
-<script src="/static/script.js"></script>
+    <script src="/static/script.js?v=1.1"></script>
 </body>
+
 </html>

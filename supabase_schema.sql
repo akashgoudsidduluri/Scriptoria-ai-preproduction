@@ -1,0 +1,58 @@
+-- ============================================================
+-- SCRIPTORIA - Supabase Database Schema
+-- Run this in: Supabase Dashboard → SQL Editor → New Query
+-- ============================================================
+
+-- ─────────────────────────────────────────
+-- 1. USERS TABLE
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.users (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username    TEXT UNIQUE NOT NULL,
+    email       TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────
+-- 2. SESSIONS TABLE
+-- Tracks active login sessions per user
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.sessions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    session_token TEXT UNIQUE NOT NULL,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    expires_at    TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days')
+);
+
+-- ─────────────────────────────────────────
+-- 3. CHAT HISTORY TABLE
+-- Stores every story prompt + AI response
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.chat_history (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    prompt     TEXT NOT NULL,
+    response   TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────
+-- 4. INDEXES (for fast lookups)
+-- ─────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id      ON public.sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token        ON public.sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_chat_history_user_id  ON public.chat_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_email           ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username        ON public.users(username);
+
+-- ─────────────────────────────────────────
+-- 5. DISABLE ROW LEVEL SECURITY
+-- Flask handles all authentication logic server-side.
+-- The anon/publishable key is only used by the Flask backend, never the browser.
+-- ─────────────────────────────────────────
+ALTER TABLE public.users        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sessions     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_history DISABLE ROW LEVEL SECURITY;
+

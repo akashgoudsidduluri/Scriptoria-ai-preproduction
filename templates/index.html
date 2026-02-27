@@ -1,30 +1,60 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Scriptoria - AI Storyboard & Script Generator</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
-<div class="landing">
-    <div class="overlay"></div>
-    <div class="landing-content">
-        <h1>AI Storyboard & Script Generator</h1>
-        <p class="tagline">Cinema, Cinema, Cinema</p>
-        <button class="cta" onclick="showModal()">Let's dive in to Cinema</button>
+    <div class="landing">
+        <div class="overlay"></div>
+        <div class="landing-content">
+            <h1>AI Storyboard & Script Generator</h1>
+            <p class="tagline">Cinema, Cinema, Cinema</p>
+            <button class="cta" onclick="showModal()">Let's dive in to Cinema</button>
+        </div>
+        <div class="bg-animate">
+            <div class="blob"></div>
+            <div class="blob"></div>
+            <div class="blob"></div>
+        </div>
     </div>
-</div>
 
-<div id="modal" class="modal">
-    <div class="modal-box">
-        <span class="close" onclick="closeModal()">×</span>
-        <h2>Welcome to Cinema World!</h2>
-        <p>Please tell us your name:</p>
-        <input id="username" placeholder="Enter your name" autofocus>
-        <button class="cta" onclick="enter()">Continue</button>
+    <div id="modal" class="modal">
+        <div class="modal-box glass">
+            <span class="close" onclick="closeModal()">×</span>
+
+            <div class="auth-tabs">
+                <button id="tab-login" class="tab-btn active" onclick="switchAuth('login')">Login</button>
+                <button id="tab-register" class="tab-btn" onclick="switchAuth('register')">Register</button>
+            </div>
+
+            <div id="login-form" class="auth-form">
+                <h2>Welcome Back</h2>
+                <p>Ready to continue your cinematic journey?</p>
+                <div class="input-group">
+                    <input type="email" id="login-email" placeholder="Email" required>
+                    <input type="password" id="login-password" placeholder="Password" required>
+                </div>
+                <button class="cta" onclick="login(event)">Login</button>
+            </div>
+
+            <div id="register-form" class="auth-form hidden">
+                <h2>Create Account</h2>
+                <p>Start your scriptwriting adventure today.</p>
+                <div class="input-group">
+                    <input type="text" id="reg-username" placeholder="Username" required>
+                    <input type="email" id="reg-email" placeholder="Email" required>
+                    <input type="password" id="reg-password" placeholder="Password" required>
+                </div>
+                <button class="cta" onclick="register(event)">Register</button>
+            </div>
+        </div>
     </div>
-</div>
 
-<script src="/static/script.js"></script>
+    <script src="/static/script.js?v=1.1"></script>
 </body>
+
 </html>
