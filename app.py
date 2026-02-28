@@ -34,15 +34,36 @@ app.register_blueprint(auth_bp)
 # ─────────────────────────────────────────────────────────────
 
 def generate_title(prompt_text):
-    """Deterministic title generation from prompt (first few words)."""
-    words = prompt_text.split()
-    meaningful = [w for w in words if len(w) > 2][:6]
-    title = " ".join(meaningful)
-    if len(title) > 40:
-        title = title[:37] + "..."
-    if not title:
-        title = "Untitled Story"
-    return title.capitalize()
+    """Use AI to generate a concise, thematic 3-5 word title for the story.
+
+    Attempts to call the local Ollama model via `call_ollama`. Falls back to a
+    deterministic heuristic if the call fails or returns nothing useful.
+    """
+    prompt = f"""You are a master screenwriter. 
+Based ONLY on the following story idea, generate a short, punchy, cinematic title (3 to 5 words).
+Do not include any quotes, preambles, or explanations. Just output the title.
+
+Story Idea: {prompt_text}"""
+    try:
+        title = call_ollama(prompt).strip()
+        title = title.replace('"', '').replace('`', '').replace('*', '')
+        if not title:
+            raise ValueError("Empty title")
+        # Ensure it's not crazy long
+        if len(title) > 60:
+            title = title[:57] + "..."
+        return title
+    except Exception as e:
+        print(f"[TITLE GEN ERROR] {e}. Falling back to deterministic.")
+        # Fallback to simple heuristic
+        words = prompt_text.split()
+        meaningful = [w for w in words if len(w) > 2][:6]
+        title = " ".join(meaningful)
+        if len(title) > 40:
+            title = title[:37] + "..."
+        if not title:
+            title = "Untitled Story"
+        return title.capitalize()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -155,6 +176,7 @@ def generate_story():
     try:
         data = request.get_json(silent=True) or {}
         storyline = data.get("storyline", "").strip()
+        provided_title = data.get("title", "").strip()
         char_ids  = data.get("character_ids", [])
         location  = data.get("location", "").strip()
         bgm_tone  = data.get("bgm", "").strip()
@@ -214,7 +236,11 @@ CRITICAL INSTRUCTIONS:
             # After generation, save to database and send metadata
             if user_id_fixed and full_text and not full_text.startswith("ERROR:"):
                 try:
-                    title = generate_title(storyline)
+                    # Use provided title if available, otherwise ask AI
+                    if provided_title:
+                        title = provided_title
+                    else:
+                        title = generate_title(storyline)
                     # Convert char_ids to JSON string for storage
                     char_ids_json = json.dumps(char_ids)
                     item = save_chat(user_id_fixed, storyline, full_text, 
@@ -336,6 +362,21 @@ REQUIREMENTS:
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/suggest_title', methods=['POST'])
+@login_required
+def suggest_title():
+    """Return an AI‑generated title for a provided story idea."""
+    data = request.get_json(silent=True) or {}
+    storyline = (data.get("storyline") or "").strip()
+    if not storyline:
+        return jsonify({"error": "Storyline is required"}), 400
+    try:
+        title = generate_title(storyline)
+        return jsonify({"title": title}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/generate_character', methods=['POST'])
 @login_required

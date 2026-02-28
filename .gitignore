@@ -1,0 +1,12 @@
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Local database
+scriptoria_local.db
+
+# IDE/settings
+.vscode/
