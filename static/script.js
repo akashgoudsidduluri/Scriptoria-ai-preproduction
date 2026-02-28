@@ -485,6 +485,39 @@ async function generate(event) {
     }
 }
 
+// --- Translation ---
+async function translateScript() {
+    const screenplayEl = document.getElementById("screenplay");
+    const targetLang = document.getElementById("target-lang")?.value;
+    if (!screenplayEl || !screenplayEl.innerText.trim()) {
+        return alert("Nothing to translate.");
+    }
+    if (!targetLang) {
+        return alert("Please select a target language.");
+    }
+
+    const btn = document.getElementById("translate-btn");
+    try {
+        if (btn) { btn.disabled = true; btn.innerText = "Translating..."; }
+        const res = await fetch("/translate_script", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script: screenplayEl.innerText, target_language: targetLang })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            // replace existing text with translation
+            screenplayEl.innerText = data.translated;
+        } else {
+            alert(data.error || "Translation failed.");
+        }
+    } catch (e) {
+        alert("Translation error.");
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = "Translate"; }
+    }
+}
+
 // --- Downloads ---
 function download(format) {
     const screenplayText = document.getElementById("screenplay")?.innerText;

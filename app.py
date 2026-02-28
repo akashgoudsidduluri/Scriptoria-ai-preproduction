@@ -93,8 +93,45 @@ def call_ollama(prompt):
 
 
 # ─────────────────────────────────────────────────────────────
-# Core Routes
+# Helpers
 # ─────────────────────────────────────────────────────────────
+
+
+def translate_script_text(text, target_lang):
+    """Translate a block of text using an external translation API.
+
+    This helper currently uses the unofficial Google Translate JSON endpoint
+    which does not require an API key. The format is simple and works for
+    short/medium pieces of text; if you need an enterprise solution replace
+    this logic with your preferred provider.
+
+    The `target_lang` should be a two-letter ISO code (e.g. 'es', 'fr', 'hi').
+    """
+    if not text or not target_lang:
+        return ""
+
+    try:
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": target_lang,
+            "dt": "t",
+            "q": text
+        }
+        resp = requests.get(url, params=params, timeout=60)
+        resp.raise_for_status()
+        result = resp.json()
+        # result[0] is a list of translated segments
+        translated = "".join([seg[0] for seg in result[0] if seg and seg[0]])
+        return translated
+    except Exception as err:
+        raise Exception(f"Translation failed: {err}")
+
+
+# ─────────────────────────────────────────────────────────────
+# Core Routes
+# ─────────────────────────────────────────────
 
 @app.route('/')
 def index():
@@ -203,6 +240,35 @@ CRITICAL INSTRUCTIONS:
 # History
 # ─────────────────────────────────────────────────────────────
 
+@app.route('/translate_script', methods=['POST'])
+@login_required
+
+def translate_script():
+    """Accepts screenplay text and a target language, returns translated text.
+
+    Request JSON should contain:
+      - script: original screenplay string
+      - target_language: two-letter ISO language code (e.g. "es", "fr")
+
+    Response JSON:
+      { "translated": "..." }
+    """
+    data = request.get_json(silent=True) or {}
+    script_text = (data.get("script") or "").strip()
+    target_lang = (data.get("target_language") or "").strip()
+
+    if not script_text:
+        return jsonify({"error": "Script text is required"}), 400
+    if not target_lang:
+        return jsonify({"error": "Target language is required"}), 400
+
+    try:
+        translated = translate_script_text(script_text, target_lang)
+        return jsonify({"translated": translated}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/history', methods=['GET'])
 @login_required
 def history():
@@ -264,7 +330,7 @@ REQUIREMENTS:
 
         suggestion = call_ollama(prompt).strip()
         # Clean up any potential markdown or quotes
-        suggestion = suggestion.replace('"', '').replace('`', '').strip()
+        suggestion = suggestion.replace('"', '').replace('', '').strip()
         
         return jsonify({"suggestion": suggestion}), 200
 
