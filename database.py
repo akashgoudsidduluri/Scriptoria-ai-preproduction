@@ -121,19 +121,26 @@ def delete_session(session_token: str):
     
     _get_client().table("sessions").delete().eq("session_token", session_token).execute()
 
-def save_chat(user_id: str, prompt: str, response: str, title: str = None):
+def save_chat(user_id: str, prompt: str, response: str, title: str = None, location: str = None, bgm: str = None, char_ids: str = None):
     if DB_MODE == "local":
         import local_db
-        return local_db.save_chat(user_id, prompt, response, title)
+        return local_db.save_chat(user_id, prompt, response, title, location, bgm, char_ids)
     
     try:
         start = time.time()
         result = _get_client().table("chat_history").insert({
-            "user_id": user_id, "prompt": prompt, "response": response, "title": title
+            "user_id": user_id, 
+            "prompt": prompt, 
+            "response": response, 
+            "title": title,
+            "location_context": location,
+            "bgm_preference": bgm,
+            "active_character_ids": char_ids
         }).execute()
         print(f"[DB] save_chat took {time.time() - start:.2f}s")
         return result.data[0] if result.data else None
     except Exception as e:
+        print(f"[DB ERROR] save_chat failed: {e}")
         return None
 
 def get_chat_history(user_id: str, limit: int = 20):
@@ -160,7 +167,7 @@ def update_chat_title(chat_id: str, user_id: str, new_title: str):
     return result.data[0] if result.data else None
 
 # ─────────────────────────────────────────────────────────────
-# CHARACTER BIBLE QUERIES
+# CHARACTER PROFILE QUERIES
 # ─────────────────────────────────────────────────────────────
 
 def save_character(user_id: str, name: str, description: str, personality: str = None):

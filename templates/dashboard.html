@@ -18,15 +18,47 @@
                 <p class="loading-text">Loading past stories...</p>
             </div>
 
-            <div class="sidebar-header" style="margin-top: 2rem;">
-                <h3>Character Bible</h3>
-                <button class="new-btn" onclick="showCharacterForm()">+ Add Char</button>
-            </div>
-            <div id="character-list" class="character-list">
-                <p class="loading-text">No characters yet.</p>
-            </div>
-
             <div class="sidebar-footer">
+                <div class="profile-tabs">
+                    <button class="tab-btn active" onclick="switchTab('profiles')">Profiles</button>
+                    <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
+                </div>
+
+                <!-- Character Profiles Section -->
+                <div id="profiles-section" class="tab-content active">
+                    <div class="sidebar-header">
+                        <h3>Profiles</h3>
+                        <button class="add-char-btn" onclick="showCharacterForm()">+</button>
+                    </div>
+                    <div id="character-list" class="character-list">
+                        <p class="loading-text">No characters yet.</p>
+                    </div>
+                </div>
+
+                <!-- Cinematic Settings Section -->
+                <div id="settings-section" class="tab-content">
+                    <div class="sidebar-header">
+                        <h3>Cinematic</h3>
+                    </div>
+                    <div class="settings-form">
+                        <div class="input-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <label>Location / Scenery</label>
+                                <button class="magic-btn-tiny" onclick="autoGenerateCinematic('location')"
+                                    title="AI Suggestion">✨</button>
+                            </div>
+                            <input type="text" id="story-location" placeholder="e.g. 1920s Delhi, Forest...">
+                        </div>
+                        <div class="input-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <label>BGM / Musical Tone</label>
+                                <button class="magic-btn-tiny" onclick="autoGenerateCinematic('bgm')"
+                                    title="AI Suggestion">✨</button>
+                            </div>
+                            <input type="text" id="story-bgm" placeholder="e.g. Sad violin, Epic drums...">
+                        </div>
+                    </div>
+                </div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
         </aside>
@@ -39,7 +71,7 @@
             <div class="content-wrapper">
                 <div class="input-section glass">
                     <h1>Enter Your Story Idea</h1>
-                    <textarea id="story" placeholder="Write your story idea here..."></textarea>
+                    <textarea id="story-input" placeholder="Write your story idea here..."></textarea>
 
                     <div id="active-characters" class="active-chars-bar">
                         <!-- Clickable character chips will go here -->
@@ -52,12 +84,12 @@
                     <div class="result-box glass">
                         <div class="tab-header">
                             <span class="tab active" onclick="switchResultTab('screenplay')">Screenplay</span>
-                            <span class="tab" onclick="switchResultTab('bible')">Character Bible</span>
+                            <span class="tab" onclick="switchResultTab('profile')">Character Profile</span>
                         </div>
                         <div id="screenplay-container">
                             <pre id="screenplay"></pre>
                         </div>
-                        <div id="bible-container" class="hidden">
+                        <div id="profile-container" class="hidden">
                             <div id="character-grid" class="char-grid">
                                 <!-- Character cards populated by JS -->
                             </div>
@@ -87,7 +119,7 @@
                 <input type="text" id="char-name" placeholder="Character Name (or leave blank for random)">
                 <textarea id="char-desc" placeholder="Physical description & role..."></textarea>
                 <textarea id="char-personality" placeholder="Personality & quirks... (Optional)"></textarea>
-                <button id="save-char-btn" class="cta" onclick="saveCharacter()">Save to Bible</button>
+                <button id="save-char-btn" class="cta" onclick="saveCharacter()">Save Profile</button>
             </div>
         </div>
     </div>

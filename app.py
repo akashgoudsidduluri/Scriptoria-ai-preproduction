@@ -82,6 +82,15 @@ def call_ollama_stream(prompt):
     except Exception as e:
         yield f"ERROR: {str(e)}"
 
+def call_ollama(prompt):
+    """Call Ollama and return the full response string."""
+    full_response = ""
+    for chunk in call_ollama_stream(prompt):
+        if chunk.startswith("ERROR:"):
+            raise Exception(chunk)
+        full_response += chunk
+    return full_response
+
 
 # ─────────────────────────────────────────────────────────────
 # Core Routes
@@ -110,22 +119,22 @@ def generate_story():
         data = request.get_json(silent=True) or {}
         storyline = data.get("storyline", "").strip()
         char_ids  = data.get("character_ids", [])
+        location  = data.get("location", "").strip()
+        bgm_tone  = data.get("bgm", "").strip()
 
         if not storyline:
             return jsonify({"error": "Storyline missing"}), 400
 
         user_id_fixed = session.get("user_id")
         
-        # --- CONTEXT INJECTION (Character Bible) ---
+        # --- CONTEXT INJECTION (Character Profiles) ---
         character_blobs = []
         if user_id_fixed and char_ids:
             from database import _get_client, DB_MODE
-            # Fetch full character details for the selected IDs
             if DB_MODE == "local":
                 import local_db
                 for cid in char_ids:
-                    # Simple local fetch
-                    res = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_all=False)
+                    res = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
                     if res: character_blobs.append(f"{res['name']}: {res['description']}. (Personality: {res.get('personality') or 'N/A'})")
             else:
                 res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
@@ -134,19 +143,30 @@ def generate_story():
         
         char_context = "\n".join([f"- {blob}" for blob in character_blobs])
         
-        prompt = f"""You are a cinematic screenwriter.
+        # --- CINEMATIC PROMPT ---
+        prompt = f"""You are a master cinematic screenwriter.
 Write a short screenplay based on the story idea below.
 
-{f"CHARACTER BIBLE (Ensure these characters match these descriptions exactly):" if char_context else ""}
-{char_context if char_context else ""}
+SCENE SETTING:
+{location if location else "Standard cinematic backdrop."}
+
+CHARACTER PROFILES (Ensure these characters match these descriptions exactly):
+{char_context if char_context else "No specific characters defined."}
 
 STORY IDEA:
 {storyline}
 
-Formatting: Use standard Hollywood screenplay format (Scene headings, character names centered, dialogues).
+MUSICAL TONE:
+{bgm_tone if bgm_tone else "Standard cinematic score."}
+
+CRITICAL INSTRUCTIONS:
+1. STRICT GENRE ADHERENCE: Write the screenplay strictly based on the provided STORY IDEA and SCENE SETTING. 
+2. NO HALLUCINATION: DO NOT introduce unrelated historical events, characters, or locations (e.g., do not mention Indian independence, 1920s Delhi, or historical figures unless explicitly requested in the prompt).
+3. Include [BGM: description] tags where the music should shift or emphasize the mood.
+4. Output ONLY the screenplay text. No preambles.
 """
 
-        print(f"\n[STORY START] user: {user_id_fixed} chars: {len(char_ids)}")
+        print(f"\n[STORY START] user: {user_id_fixed} chars: {len(char_ids)} loc: {len(location)}")
 
         def generate():
             full_text = ""
@@ -156,10 +176,15 @@ Formatting: Use standard Hollywood screenplay format (Scene headings, character 
 
             # After generation, save to database and send metadata
             if user_id_fixed and full_text and not full_text.startswith("ERROR:"):
-                db_start = time.time()
                 try:
                     title = generate_title(storyline)
-                    item = save_chat(user_id_fixed, storyline, full_text, title=title)
+                    # Convert char_ids to JSON string for storage
+                    char_ids_json = json.dumps(char_ids)
+                    item = save_chat(user_id_fixed, storyline, full_text, 
+                                     title=title, 
+                                     location=location, 
+                                     bgm=bgm_tone, 
+                                     char_ids=char_ids_json)
                     if item:
                         yield f"data: {json.dumps({'metadata': item})}\n\n"
                 except Exception as db_err:
@@ -211,31 +236,79 @@ def rename_chat():
 # Character Bible
 # ─────────────────────────────────────────────────────────────
 
+@app.route('/generate_cinematic_setting', methods=['POST'])
+def generate_cinematic_setting():
+    """Suggests an appropriate location or BGM tone based on the storyline."""
+    try:
+        data = request.get_json(silent=True) or {}
+        storyline = data.get("storyline", "").strip()
+        setting_type = data.get("type", "location")  # "location" or "bgm"
+
+        if not storyline:
+            return jsonify({"error": "Please provide a story idea first."}), 400
+
+        type_label = "SCENE LOCATION / SCENERY" if setting_type == "location" else "BGM / MUSICAL TONE"
+
+        prompt = f"""You are a creative screenplay consultant.
+Based ONLY on the STORY IDEA below, suggest a concise, rich, and fitting {type_label}.
+
+STORY IDEA:
+{storyline}
+
+REQUIREMENTS:
+1. Return ONLY the description, nothing else. 
+2. Keep it under 15 words.
+3. Be highly specific to the genre, era, and mood implied by the STORY IDEA. (If it's fantasy, suggest fantasy elements. If historical, suggest historical).
+4. DO NOT reference any events or locations not implied by the STORY IDEA.
+"""
+
+        suggestion = call_ollama(prompt).strip()
+        # Clean up any potential markdown or quotes
+        suggestion = suggestion.replace('"', '').replace('`', '').strip()
+        
+        return jsonify({"suggestion": suggestion}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/generate_character', methods=['POST'])
 @login_required
 def gen_character():
     """Use AI to generate a character profile based on a name or small prompt."""
     data = request.json or {}
     input_text = data.get("name", "").strip() or "a random unique character"
+    storyline = data.get("storyline", "").strip()
     
-    prompt = f"""You are a master cinematic storyteller and historical researcher.
-Generate a detailed character profile for: "{input_text}"
+    context_instruction = ""
+    if storyline:
+        context_instruction = f"""
+STORY CONTEXT:
+"{storyline}"
 
-CRITICAL RULES:
-1. If "{input_text}" is a historical figure, freedom fighter, or well-known person (e.g., Sitarama Raju, Bheem, Gandhi), you MUST describe them according to their historical reality, era (1920s), and actual legacy. 
-2. Do NOT invent modern roles like "software engineer" or "ML researcher" if the context is clearly historical or cinematic.
-3. If they are a fictional character archetype, make them cinematic and gritty.
+CRITICAL: The character MUST fit seamlessly into the above STORY CONTEXT. If the input name (like 'Kala Bhairava') belongs to a real-world or mythological figure, describe a character in THIS story who happens to have that name matching the genre of the STORY CONTEXT.
+"""
+    else:
+        context_instruction = f"""
+No specific story context provided. If the input name belongs to a historical or mythological figure (like 'Kala Bhairava'), describe them according to their actual legend or historical reality.
+"""
+
+    prompt = f"""You are a master cinematic storyteller and character writer.
+Generate a detailed character profile for EXACTLY this name: "{input_text}"
+{context_instruction}
+
+CRITICAL INSTRUCTIONS:
+1. YOU MUST USE THE EXACT NAME PROVIDED: "{input_text}". Do not swap it for a related movie character or reincarnation (e.g. do not change Kala Bhairava to Harsha).
+2. Adapt to the genre implied by the input or STORY CONTEXT.
+3. Keep the character cinematic, compelling, and grounded.
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 Name: [Character Name]
-Description: [2-3 sentences on appearance, role, and era significance]
+Description: [2-3 sentences on appearance, background, and role]
 Personality: [Key traits, core values, and habits]
 """
     
     try:
-        full_response = ""
-        for chunk in call_ollama_stream(prompt):
-            full_response += chunk
+        full_response = call_ollama(prompt)
         
         # Simple parser for the AI response
         lines = full_response.split("\n")
@@ -303,6 +376,8 @@ def delete_char():
 def download_pdf():
     data = request.json or {}
     screenplay = data.get('screenplay', '')
+    location = data.get('location', '')
+    bgm = data.get('bgm', '')
     char_ids = data.get('character_ids', [])
     if not screenplay: return jsonify({"error": "No content"}), 400
 
@@ -311,10 +386,20 @@ def download_pdf():
     styles = getSampleStyleSheet()
     elements = []
     
-    # --- ADD CHARACTER BIBLE TO PDF ---
+    # --- ADD CINEMATIC SETTINGS TO PDF ---
+    if location or bgm:
+        elements.append(Paragraph("CINEMATIC SETTINGS", styles["Heading1"]))
+        elements.append(Spacer(1, 12))
+        if location:
+            elements.append(Paragraph(f"<b>Location:</b> {location}", styles["Normal"]))
+        if bgm:
+            elements.append(Paragraph(f"<b>BGM Tone:</b> {bgm}", styles["Normal"]))
+        elements.append(Spacer(1, 24))
+
+    # --- ADD CHARACTER PROFILES TO PDF ---
     if char_ids:
         from database import _get_client, DB_MODE
-        elements.append(Paragraph("CHARACTER BIBLE", styles["Heading1"]))
+        elements.append(Paragraph("CHARACTER PROFILES", styles["Heading1"]))
         elements.append(Spacer(1, 12))
         
         char_blobs = []
@@ -354,6 +439,8 @@ def download_pdf():
 def download_docx():
     data = request.json or {}
     screenplay = data.get('screenplay', '')
+    location = data.get('location', '')
+    bgm = data.get('bgm', '')
     char_ids = data.get('character_ids', [])
     if not screenplay: return jsonify({"error": "No content"}), 400
 
@@ -362,10 +449,23 @@ def download_docx():
         section.left_margin, section.right_margin = Inches(1.5), Inches(1)
         section.top_margin, section.bottom_margin = Inches(1), Inches(1)
 
-    # --- ADD CHARACTER BIBLE TO DOCX ---
+    # --- ADD CINEMATIC SETTINGS TO DOCX ---
+    if location or bgm:
+        doc.add_heading('CINEMATIC SETTINGS', level=1)
+        if location:
+            p = doc.add_paragraph()
+            p.add_run('Location: ').bold = True
+            p.add_run(location)
+        if bgm:
+            p = doc.add_paragraph()
+            p.add_run('BGM Tone: ').bold = True
+            p.add_run(bgm)
+        doc.add_paragraph() # Spacer
+        
+    # --- ADD CHARACTER PROFILES TO DOCX ---
     if char_ids:
         from database import _get_client, DB_MODE
-        doc.add_heading('CHARACTER BIBLE', level=1)
+        doc.add_heading('CHARACTER PROFILES', level=1)
         
         char_blobs = []
         if DB_MODE == "local":

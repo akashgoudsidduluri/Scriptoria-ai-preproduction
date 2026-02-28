@@ -491,7 +491,81 @@ pre {
     margin-top: 40px;
 }
 
-/* Character Bible Specific Styles */
+/* Tab System for Profiles/Settings */
+.sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+}
+
+.profile-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: var(--text-muted);
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    background: var(--accent);
+    color: white;
+}
+
+.tab-content {
+    display: none;
+    flex-direction: column;
+}
+
+.tab-content.active {
+    display: flex;
+}
+
+.settings-form {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-form .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.settings-form label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.settings-form input {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.settings-form input:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.2);
+}
+
+/* Character Profile Specific Styles */
 .character-list {
     flex: 0 1 auto;
     max-height: 250px;
@@ -510,16 +584,38 @@ pre {
     border: 1px solid rgba(255, 255, 255, 0.05);
     cursor: pointer;
     transition: 0.2s;
+    transition: transform 0.2s;
+    /* Added from instruction */
 }
 
 .char-item:hover {
     background: rgba(255, 255, 255, 0.05);
     border-color: var(--secondary);
+    transform: translateX(3px);
+    /* Added from instruction */
 }
 
 .char-item span {
     font-size: 0.85rem;
     font-weight: 500;
+}
+
+.magic-btn-tiny {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.magic-btn-tiny:hover {
+    background: var(--secondary);
+    color: white;
+    transform: scale(1.1);
 }
 
 .char-item.active {
@@ -622,7 +718,7 @@ pre {
     opacity: 0.7;
 }
 
-/* Modal for Character Bible */
+/* Modal for Character Profile */
 .modal {
     display: none;
     position: fixed;

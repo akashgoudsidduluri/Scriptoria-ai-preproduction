@@ -25,23 +25,35 @@ function closeCharModal() {
     if (modal) modal.style.display = "none";
 }
 
+// --- Navigation & Tabs ---
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    // Support either 'profiles' or 'settings'
+    const btn = document.querySelector(`.tab-btn[onclick*="${tabId}"]`);
+    if (btn) btn.classList.add('active');
+
+    const content = document.getElementById(`${tabId}-section`);
+    if (content) content.classList.add('active');
+}
+
 function switchResultTab(tab) {
     const screenplayTab = document.querySelector(".tab:nth-child(1)");
-    const bibleTab = document.querySelector(".tab:nth-child(2)");
+    const profileTab = document.querySelector(".tab:nth-child(2)");
     const screenplayCont = document.getElementById("screenplay-container");
-    const bibleCont = document.getElementById("bible-container");
+    const profileCont = document.getElementById("profile-container");
 
-    if (tab === 'screenplay') {
+    if (tab === "screenplay") {
         screenplayTab.classList.add("active");
-        bibleTab.classList.remove("active");
+        profileTab.classList.remove("active");
         screenplayCont.classList.remove("hidden");
-        bibleCont.classList.add("hidden");
+        profileCont.classList.add("hidden");
     } else {
+        profileTab.classList.add("active");
         screenplayTab.classList.remove("active");
-        bibleTab.classList.add("active");
+        profileCont.classList.remove("hidden");
         screenplayCont.classList.add("hidden");
-        bibleCont.classList.remove("hidden");
-        fetchCharacters(); // Refresh when opening bible
     }
 }
 
@@ -171,11 +183,31 @@ async function renameChat(id, currentTitle, event) {
 }
 
 function loadHistoryItem(item, event) {
-    const storyField = document.getElementById("story");
+    const storyField = document.getElementById("story-input");
     const screenplayField = document.getElementById("screenplay");
 
     if (storyField) storyField.value = item.prompt;
     if (screenplayField) screenplayField.innerText = item.response;
+
+    // Restore Cinematic Settings
+    document.getElementById('story-location').value = item.location_context || "";
+    document.getElementById('story-bgm').value = item.bgm_preference || "";
+
+    // Restore Selected Characters
+    selectedCharacterIds.clear();
+    if (item.active_character_ids) {
+        try {
+            const ids = JSON.parse(item.active_character_ids);
+            ids.forEach(id => selectedCharacterIds.add(id));
+        } catch (e) { console.error("Could not parse character IDs", e); }
+    }
+
+    // Ensure allCharacters is loaded before rendering
+    if (allCharacters.length === 0) {
+        fetchCharacters().then(() => renderCharacters());
+    } else {
+        renderCharacters();
+    }
 
     document.querySelectorAll(".history-item").forEach(el => el.classList.remove("active"));
     let target = event ? event.target : null;
@@ -184,52 +216,103 @@ function loadHistoryItem(item, event) {
 }
 
 function newStory() {
-    const storyField = document.getElementById("story");
-    const screenplayField = document.getElementById("screenplay");
-    if (storyField) storyField.value = "";
-    if (screenplayField) screenplayField.innerText = "";
+    document.getElementById('screenplay').innerHTML = '<p class="placeholder-text">Cinematic results will appear here...</p>';
+    document.getElementById('story-input').value = "";
+    document.getElementById('story-location').value = "";
+    document.getElementById('story-bgm').value = "";
+    selectedCharacterIds.clear();
+    renderCharacters();
     document.querySelectorAll(".history-item").forEach(el => el.classList.remove("active"));
 }
 
 // --- Character Bible Actions ---
 
-async function fetchCharacters() {
+function renderCharacters() {
     const listEl = document.getElementById("character-list");
     const gridEl = document.getElementById("character-grid");
     if (!listEl || !gridEl) return;
 
+    listEl.innerHTML = "";
+    gridEl.innerHTML = "";
+
+    const activeChars = allCharacters.filter(c => selectedCharacterIds.has(c.id));
+
+    // 1. Sidebar list (Show ALL characters, with selection state)
+    if (allCharacters && allCharacters.length > 0) {
+        allCharacters.forEach(char => {
+            const isSelected = selectedCharacterIds.has(char.id);
+            const item = document.createElement("div");
+            item.className = `char-item ${isSelected ? 'active' : ''}`;
+            item.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} style="pointer-events:none;">
+                    <span>${char.name}</span>
+                </div>
+                <button onclick="deleteCharacter('${char.id}', event)" style="background:none;border:none;cursor:pointer;opacity:0.5;">×</button>
+            `;
+            item.onclick = () => toggleCharacterSelection(char);
+            listEl.appendChild(item);
+        });
+    } else {
+        listEl.innerHTML = '<p class="loading-text">No characters yet.</p>';
+    }
+
+    // 2. Profile Grid Card (ONLY show selected characters for the active story)
+    if (activeChars.length > 0) {
+        activeChars.forEach(char => {
+            const card = document.createElement("div");
+            card.className = "char-card glass";
+            card.innerHTML = `
+                <h4>${char.name}</h4>
+                <p>${char.description}</p>
+                ${char.personality ? `<p class="meta">Personality: ${char.personality}</p>` : ''}
+            `;
+            gridEl.appendChild(card);
+        });
+    } else {
+        gridEl.innerHTML = `
+            <div style="text-align:center; color:rgba(255,255,255,0.3); padding:40px;">
+                <p>No characters selected for this story.</p>
+                <p style="font-size:0.8rem; margin-top:10px;">Select profiles from the sidebar to include them in your script.</p>
+            </div>`;
+    }
+
+    updateActiveCharBar(allCharacters);
+}
+
+async function autoGenerateCinematic(type) {
+    const storyline = document.getElementById("story-input").value.trim();
+    if (!storyline) return alert("Please enter a story idea first.");
+
+    const btn = document.querySelector(`.magic-btn-tiny[onclick*="${type}"]`);
+    const input = document.getElementById(type === 'location' ? 'story-location' : 'story-bgm');
+
+    try {
+        if (btn) { btn.disabled = true; btn.innerText = "⏳"; }
+        const res = await fetch("/generate_cinematic_setting", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storyline, type })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            input.value = data.suggestion;
+        } else {
+            alert(data.error || "AI Magic failed.");
+        }
+    } catch (e) {
+        alert("Server error.");
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = "✨"; }
+    }
+}
+
+async function fetchCharacters() {
     try {
         const res = await fetch("/get_characters");
         const data = await res.json();
-
-        allCharacters = data.characters || []; // Update cache
-        listEl.innerHTML = "";
-        gridEl.innerHTML = "";
-
-        if (data.characters && data.characters.length > 0) {
-            data.characters.forEach(char => {
-                // Sidebar item
-                const item = document.createElement("div");
-                item.className = `char-item ${selectedCharacterIds.has(char.id) ? 'active' : ''}`;
-                item.innerHTML = `<span>${char.name}</span> <button onclick="deleteCharacter('${char.id}', event)" style="background:none;border:none;cursor:pointer;opacity:0.5;">×</button>`;
-                item.onclick = () => toggleCharacterSelection(char);
-                listEl.appendChild(item);
-
-                // Bible Grid Card
-                const card = document.createElement("div");
-                card.className = "char-card glass";
-                card.innerHTML = `
-                    <h4>${char.name}</h4>
-                    <p>${char.description}</p>
-                    ${char.personality ? `<p class="meta">Personality: ${char.personality}</p>` : ''}
-                `;
-                gridEl.appendChild(card);
-            });
-            updateActiveCharBar(data.characters);
-        } else {
-            listEl.innerHTML = '<p class="loading-text">No characters yet.</p>';
-            gridEl.innerHTML = '<p class="loading-text">Your Character Bible is empty.</p>';
-        }
+        allCharacters = data.characters || [];
+        renderCharacters();
     } catch (e) {
         console.error("Failed to fetch characters", e);
     }
@@ -241,12 +324,17 @@ async function autoGenerateCharacter() {
     const persInput = document.getElementById("char-personality");
     const saveBtn = document.getElementById("save-char-btn");
 
+    const storyInput = document.getElementById("story-input").value.trim();
+
     try {
         if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "✨ MAGIC IN PROGRESS..."; }
         const res = await fetch("/generate_character", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: nameInput.value.trim() })
+            body: JSON.stringify({
+                name: nameInput.value.trim(),
+                storyline: storyInput
+            })
         });
         const data = await res.json();
         if (res.ok) {
@@ -259,7 +347,7 @@ async function autoGenerateCharacter() {
     } catch (e) {
         alert("Server error during generation.");
     } finally {
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = "Save to Bible"; }
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = "Save Profile"; }
     }
 }
 
@@ -291,7 +379,7 @@ async function saveCharacter() {
 
 async function deleteCharacter(id, event) {
     if (event) event.stopPropagation();
-    if (!confirm("Delete this character from the Bible?")) return;
+    if (!confirm("Are you sure you want to delete this profile?")) return;
 
     try {
         await fetch("/delete_character", {
@@ -299,7 +387,7 @@ async function deleteCharacter(id, event) {
             body: JSON.stringify({ id })
         });
         selectedCharacterIds.delete(id);
-        fetchCharacters();
+        fetchCharacters(); // Full refresh to update allCharacters cache
     } catch (e) { alert("Delete failed."); }
 }
 
@@ -309,7 +397,7 @@ function toggleCharacterSelection(char) {
     } else {
         selectedCharacterIds.add(char.id);
     }
-    fetchCharacters();
+    renderCharacters();
 }
 
 function updateActiveCharBar(allChars) {
@@ -329,16 +417,13 @@ function updateActiveCharBar(allChars) {
 // --- Generation & Metadata Streaming ---
 
 async function generate(event) {
-    const storyline = document.getElementById("story")?.value.trim();
+    const storyline = document.getElementById("story-input").value.trim();
+    const location = document.getElementById("story-location").value.trim();
+    const bgm = document.getElementById("story-bgm").value.trim();
+
     if (!storyline) return alert("Please enter a story idea.");
 
-    // CONTEXT INJECTION: Prepare character descriptions
-    let characterContext = "";
-    const listEl = document.getElementById("character-list"); // Used to find names if needed
-    // In a real app we'd store the full objects, for now we'll fetch them from the UI or state
-    // For simplicity, we'll just let the backend handle fetching the descriptions of the IDs we send
-
-    const btn = event ? event.currentTarget : null;
+    const btn = document.querySelector(".cta");
     const screenplayEl = document.getElementById("screenplay");
     const historyList = document.getElementById("history-list");
 
@@ -350,7 +435,9 @@ async function generate(event) {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 storyline,
-                character_ids: Array.from(selectedCharacterIds) // Send selected IDs for injection
+                character_ids: Array.from(selectedCharacterIds), // Send selected IDs for injection
+                location: location,
+                bgm: bgm
             })
         });
 
@@ -401,14 +488,24 @@ async function generate(event) {
 // --- Downloads ---
 function download(format) {
     const screenplayText = document.getElementById("screenplay")?.innerText;
+    const locationValue = document.getElementById("story-location")?.value || "";
+    const bgmValue = document.getElementById("story-bgm")?.value || "";
+
     if (!screenplayText) return alert("No content to download.");
 
     if (format === 'txt') {
         let content = "";
 
-        // Add Character Bible to TXT
+        if (locationValue || bgmValue) {
+            content += "=== CINEMATIC SETTINGS ===\n";
+            if (locationValue) content += `Location: ${locationValue}\n`;
+            if (bgmValue) content += `BGM Tone: ${bgmValue}\n`;
+            content += "========================\n\n";
+        }
+
+        // Add Character Profiles to TXT
         if (selectedCharacterIds.size > 0) {
-            content += "=== CHARACTER BIBLE ===\n\n";
+            content += "=== CHARACTER PROFILES ===\n\n";
             allCharacters.filter(c => selectedCharacterIds.has(c.id)).forEach(char => {
                 content += `${char.name.toUpperCase()}\n`;
                 content += `${char.description}\n`;
@@ -433,6 +530,8 @@ function download(format) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             screenplay: screenplayText,
+            location: locationValue,
+            bgm: bgmValue,
             character_ids: Array.from(selectedCharacterIds) // Include selected character IDs
         })
     })
@@ -448,5 +547,6 @@ function download(format) {
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("history-list")) {
         fetchHistory();
+        fetchCharacters(); // Pre-load profiles for chips/grid
     }
 });

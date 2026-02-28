@@ -36,11 +36,14 @@ CREATE TABLE IF NOT EXISTS public.chat_history (
     prompt     TEXT NOT NULL,
     response   TEXT NOT NULL,
     title      TEXT,
+    location_context TEXT,
+    bgm_preference  TEXT,
+    active_character_ids JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ─────────────────────────────────────────
--- 4. CHARACTERS TABLE (Character Bible)
+-- 4. CHARACTER PROFILES
 -- Stores detailed descriptions of recurring characters
 -- ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.characters (

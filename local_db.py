@@ -35,11 +35,14 @@ def init_db():
         prompt TEXT,
         response TEXT,
         title TEXT,
+        location_context TEXT,
+        bgm_preference TEXT,
+        active_character_ids TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )''')
     
-    # Characters table (Character Bible)
+    # Character Profiles (per story)
     c.execute('''CREATE TABLE IF NOT EXISTS characters (
         id TEXT PRIMARY KEY,
         user_id TEXT,
@@ -50,6 +53,18 @@ def init_db():
         FOREIGN KEY(user_id) REFERENCES users(id)
     )''')
     
+    # --- MIGRATIONS ---
+    # Check for missing columns in chat_history (for older DB versions)
+    c.execute("PRAGMA table_info(chat_history)")
+    columns = [col[1] for col in c.fetchall()]
+    
+    if "location_context" not in columns:
+        c.execute("ALTER TABLE chat_history ADD COLUMN location_context TEXT")
+    if "bgm_preference" not in columns:
+        c.execute("ALTER TABLE chat_history ADD COLUMN bgm_preference TEXT")
+    if "active_character_ids" not in columns:
+        c.execute("ALTER TABLE chat_history ADD COLUMN active_character_ids TEXT")
+
     conn.commit()
     conn.close()
 
@@ -102,11 +117,20 @@ def get_session(session_token):
         session["users"] = user
     return session
 
-def save_chat(user_id, prompt, response, title):
+def save_chat(user_id, prompt, response, title, location_context=None, bgm_preference=None, active_character_ids=None):
     chat_id = str(uuid.uuid4())
-    _run_query("INSERT INTO chat_history (id, user_id, prompt, response, title) VALUES (?, ?, ?, ?, ?)",
-               (chat_id, user_id, prompt, response, title))
-    return {"id": chat_id, "user_id": user_id, "prompt": prompt, "response": response, "title": title}
+    _run_query("INSERT INTO chat_history (id, user_id, prompt, response, title, location_context, bgm_preference, active_character_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+               (chat_id, user_id, prompt, response, title, location_context, bgm_preference, active_character_ids))
+    return {
+        "id": chat_id, 
+        "user_id": user_id, 
+        "prompt": prompt, 
+        "response": response, 
+        "title": title,
+        "location_context": location_context,
+        "bgm_preference": bgm_preference,
+        "active_character_ids": active_character_ids
+    }
 
 def get_chat_history(user_id, limit=20):
     return _run_query("SELECT * FROM chat_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", 
@@ -115,7 +139,7 @@ def get_chat_history(user_id, limit=20):
 def delete_session(token):
     _run_query("DELETE FROM sessions WHERE session_token = ?", (token,))
 
-# --- CHARACTER BIBLE HELPERS ---
+# --- CHARACTER PROFILE HELPERS ---
 
 def save_character(user_id, name, description, personality=None):
     char_id = str(uuid.uuid4())
