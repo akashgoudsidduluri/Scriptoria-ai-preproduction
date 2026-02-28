@@ -17,6 +17,15 @@
             <div id="history-list" class="history-list">
                 <p class="loading-text">Loading past stories...</p>
             </div>
+
+            <div class="sidebar-header" style="margin-top: 2rem;">
+                <h3>Character Bible</h3>
+                <button class="new-btn" onclick="showCharacterForm()">+ Add Char</button>
+            </div>
+            <div id="character-list" class="character-list">
+                <p class="loading-text">No characters yet.</p>
+            </div>
+
             <div class="sidebar-footer">
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
@@ -31,13 +40,28 @@
                 <div class="input-section glass">
                     <h1>Enter Your Story Idea</h1>
                     <textarea id="story" placeholder="Write your story idea here..."></textarea>
+
+                    <div id="active-characters" class="active-chars-bar">
+                        <!-- Clickable character chips will go here -->
+                    </div>
+
                     <button class="cta" onclick="generate(event)">Generate Content</button>
                 </div>
 
                 <div class="results">
                     <div class="result-box glass">
-                        <h3>Screenplay</h3>
-                        <pre id="screenplay"></pre>
+                        <div class="tab-header">
+                            <span class="tab active" onclick="switchResultTab('screenplay')">Screenplay</span>
+                            <span class="tab" onclick="switchResultTab('bible')">Character Bible</span>
+                        </div>
+                        <div id="screenplay-container">
+                            <pre id="screenplay"></pre>
+                        </div>
+                        <div id="bible-container" class="hidden">
+                            <div id="character-grid" class="char-grid">
+                                <!-- Character cards populated by JS -->
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -48,6 +72,24 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Character Creator Modal -->
+    <div id="char-modal" class="modal">
+        <div class="modal-content glass">
+            <span class="close" onclick="closeCharModal()">&times;</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>New Character</h2>
+                <button class="new-btn" style="background: var(--secondary); border:none;"
+                    onclick="autoGenerateCharacter()">✨ AI Magic</button>
+            </div>
+            <div class="char-form">
+                <input type="text" id="char-name" placeholder="Character Name (or leave blank for random)">
+                <textarea id="char-desc" placeholder="Physical description & role..."></textarea>
+                <textarea id="char-personality" placeholder="Personality & quirks... (Optional)"></textarea>
+                <button id="save-char-btn" class="cta" onclick="saveCharacter()">Save to Bible</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/script.js?v=1.1"></script>

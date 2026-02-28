@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime
 
-DB_PATH = "scriptoria_local.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scriptoria_local.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -35,6 +35,17 @@ def init_db():
         prompt TEXT,
         response TEXT,
         title TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )''')
+    
+    # Characters table (Character Bible)
+    c.execute('''CREATE TABLE IF NOT EXISTS characters (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        personality TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )''')
@@ -104,6 +115,20 @@ def get_chat_history(user_id, limit=20):
 def delete_session(token):
     _run_query("DELETE FROM sessions WHERE session_token = ?", (token,))
 
+# --- CHARACTER BIBLE HELPERS ---
+
+def save_character(user_id, name, description, personality=None):
+    char_id = str(uuid.uuid4())
+    _run_query("INSERT INTO characters (id, user_id, name, description, personality) VALUES (?, ?, ?, ?, ?)",
+               (char_id, user_id, name, description, personality))
+    return {"id": char_id, "user_id": user_id, "name": name, "description": description, "personality": personality}
+
+def get_characters(user_id):
+    return _run_query("SELECT * FROM characters WHERE user_id = ? ORDER BY created_at DESC", 
+                     (user_id,), fetch_all=True)
+
+def delete_character(char_id, user_id):
+    _run_query("DELETE FROM characters WHERE id = ? AND user_id = ?", (char_id, user_id))
+
 # Auto-init on first import
-if not os.path.exists(DB_PATH):
-    init_db()
+init_db()

@@ -34,16 +34,9 @@ def _get_client() -> Client:
         
         try:
             import time
-            from supabase.lib.client_options import ClientOptions
             start = time.time()
-            
-            # PERFORMANCE FIX: Set a reasonable timeout for Postgrest.
-            # (Removed storage_client_timeout as it caused attribute errors in some versions)
-            client_options = ClientOptions(
-                postgrest_client_timeout=15,
-            )
-            
-            _supabase_client = create_client(url, key, options=client_options)
+            # Initialize with default client (NO_PROXY env will be picked up by httpx automagically)
+            _supabase_client = create_client(url, key)
             print(f"[DB] Supabase (Cloud) initialized in {time.time() - start:.4f}s")
         except Exception as e:
             print(f"[DB ERROR] Client failed: {e}")
@@ -158,8 +151,60 @@ def get_chat_history(user_id: str, limit: int = 20):
 
 def update_chat_title(chat_id: str, user_id: str, new_title: str):
     if DB_MODE == "local":
-        # Simplified for mock
+        # SQLite implementation (minimal for rename)
+        import local_db
+        local_db._run_query("UPDATE chat_history SET title = ? WHERE id = ? AND user_id = ?", (new_title, chat_id, user_id))
         return {"id": chat_id, "title": new_title}
     
     result = _get_client().table("chat_history").update({"title": new_title}).eq("id", chat_id).eq("user_id", user_id).execute()
     return result.data[0] if result.data else None
+
+# ─────────────────────────────────────────────────────────────
+# CHARACTER BIBLE QUERIES
+# ─────────────────────────────────────────────────────────────
+
+def save_character(user_id: str, name: str, description: str, personality: str = None):
+    try:
+        if DB_MODE == "local":
+            import local_db
+            return local_db.save_character(user_id, name, description, personality)
+        start = time.time()
+        result = _get_client().table("characters").insert({
+            "user_id": user_id, 
+            "name": name, 
+            "description": description, 
+            "personality": personality
+        }).execute()
+        print(f"[DB] save_character took {time.time() - start:.2f}s")
+        return result.data[0] if result.data else None
+    except Exception as e:
+        err_msg = str(e)
+        if "public.characters" in err_msg:
+            err_msg = "Table 'characters' missing in Supabase. Please run the SQL in supabase_schema.sql or switch to DB_MODE=local in .env"
+        print(f"[DB ERROR] save_character failed: {err_msg}")
+        return f"Database error: {err_msg}"
+
+def get_characters(user_id: str):
+    if DB_MODE == "local":
+        import local_db
+        return local_db.get_characters(user_id)
+    
+    try:
+        start = time.time()
+        result = _get_client().table("characters").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        print(f"[DB] get_characters took {time.time() - start:.2f}s")
+        return result.data
+    except Exception as e:
+        print(f"[DB ERROR] get_characters failed: {e}")
+        return []
+
+def delete_character(char_id: str, user_id: str):
+    try:
+        if DB_MODE == "local":
+            import local_db
+            return local_db.delete_character(char_id, user_id)
+        _get_client().table("characters").delete().eq("id", char_id).eq("user_id", user_id).execute()
+    except Exception as e:
+        err_msg = str(e)
+        print(f"[DB ERROR] delete_character failed: {err_msg}")
+        return f"Database error: {err_msg}"

@@ -11,6 +11,40 @@ function closeModal() {
     if (modal) modal.classList.remove("visible");
 }
 
+// --- Character Bible UI ---
+let selectedCharacterIds = new Set();
+let allCharacters = []; // Global cache for downloads
+
+function showCharacterForm() {
+    const modal = document.getElementById("char-modal");
+    if (modal) modal.style.display = "block";
+}
+
+function closeCharModal() {
+    const modal = document.getElementById("char-modal");
+    if (modal) modal.style.display = "none";
+}
+
+function switchResultTab(tab) {
+    const screenplayTab = document.querySelector(".tab:nth-child(1)");
+    const bibleTab = document.querySelector(".tab:nth-child(2)");
+    const screenplayCont = document.getElementById("screenplay-container");
+    const bibleCont = document.getElementById("bible-container");
+
+    if (tab === 'screenplay') {
+        screenplayTab.classList.add("active");
+        bibleTab.classList.remove("active");
+        screenplayCont.classList.remove("hidden");
+        bibleCont.classList.add("hidden");
+    } else {
+        screenplayTab.classList.remove("active");
+        bibleTab.classList.add("active");
+        screenplayCont.classList.add("hidden");
+        bibleCont.classList.remove("hidden");
+        fetchCharacters(); // Refresh when opening bible
+    }
+}
+
 function switchAuth(type) {
     const loginForm = document.getElementById("login-form");
     const regForm = document.getElementById("register-form");
@@ -157,11 +191,152 @@ function newStory() {
     document.querySelectorAll(".history-item").forEach(el => el.classList.remove("active"));
 }
 
+// --- Character Bible Actions ---
+
+async function fetchCharacters() {
+    const listEl = document.getElementById("character-list");
+    const gridEl = document.getElementById("character-grid");
+    if (!listEl || !gridEl) return;
+
+    try {
+        const res = await fetch("/get_characters");
+        const data = await res.json();
+
+        allCharacters = data.characters || []; // Update cache
+        listEl.innerHTML = "";
+        gridEl.innerHTML = "";
+
+        if (data.characters && data.characters.length > 0) {
+            data.characters.forEach(char => {
+                // Sidebar item
+                const item = document.createElement("div");
+                item.className = `char-item ${selectedCharacterIds.has(char.id) ? 'active' : ''}`;
+                item.innerHTML = `<span>${char.name}</span> <button onclick="deleteCharacter('${char.id}', event)" style="background:none;border:none;cursor:pointer;opacity:0.5;">×</button>`;
+                item.onclick = () => toggleCharacterSelection(char);
+                listEl.appendChild(item);
+
+                // Bible Grid Card
+                const card = document.createElement("div");
+                card.className = "char-card glass";
+                card.innerHTML = `
+                    <h4>${char.name}</h4>
+                    <p>${char.description}</p>
+                    ${char.personality ? `<p class="meta">Personality: ${char.personality}</p>` : ''}
+                `;
+                gridEl.appendChild(card);
+            });
+            updateActiveCharBar(data.characters);
+        } else {
+            listEl.innerHTML = '<p class="loading-text">No characters yet.</p>';
+            gridEl.innerHTML = '<p class="loading-text">Your Character Bible is empty.</p>';
+        }
+    } catch (e) {
+        console.error("Failed to fetch characters", e);
+    }
+}
+
+async function autoGenerateCharacter() {
+    const nameInput = document.getElementById("char-name");
+    const descInput = document.getElementById("char-desc");
+    const persInput = document.getElementById("char-personality");
+    const saveBtn = document.getElementById("save-char-btn");
+
+    try {
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "✨ MAGIC IN PROGRESS..."; }
+        const res = await fetch("/generate_character", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: nameInput.value.trim() })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            nameInput.value = data.name;
+            descInput.value = data.description;
+            persInput.value = data.personality;
+        } else {
+            alert("AI Magic failed: " + (data.error || "Unknown error"));
+        }
+    } catch (e) {
+        alert("Server error during generation.");
+    } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = "Save to Bible"; }
+    }
+}
+
+async function saveCharacter() {
+    const name = document.getElementById("char-name").value.trim();
+    const description = document.getElementById("char-desc").value.trim();
+    const personality = document.getElementById("char-personality").value.trim();
+
+    if (!name || !description) return alert("Name and description are required.");
+
+    try {
+        const res = await fetch("/save_character", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, description, personality })
+        });
+        if (res.ok) {
+            closeCharModal();
+            fetchCharacters();
+            // Clear form
+            document.getElementById("char-name").value = "";
+            document.getElementById("char-desc").value = "";
+            document.getElementById("char-personality").value = "";
+        } else {
+            const d = await res.json();
+            alert(d.error || "Failed to save.");
+        }
+    } catch (e) { alert("Server error."); }
+}
+
+async function deleteCharacter(id, event) {
+    if (event) event.stopPropagation();
+    if (!confirm("Delete this character from the Bible?")) return;
+
+    try {
+        await fetch("/delete_character", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+        });
+        selectedCharacterIds.delete(id);
+        fetchCharacters();
+    } catch (e) { alert("Delete failed."); }
+}
+
+function toggleCharacterSelection(char) {
+    if (selectedCharacterIds.has(char.id)) {
+        selectedCharacterIds.delete(char.id);
+    } else {
+        selectedCharacterIds.add(char.id);
+    }
+    fetchCharacters();
+}
+
+function updateActiveCharBar(allChars) {
+    const bar = document.getElementById("active-characters");
+    if (!bar) return;
+    bar.innerHTML = "";
+
+    allChars.filter(c => selectedCharacterIds.has(c.id)).forEach(char => {
+        const chip = document.createElement("span");
+        chip.className = "char-chip active";
+        chip.innerText = char.name;
+        chip.onclick = () => toggleCharacterSelection(char);
+        bar.appendChild(chip);
+    });
+}
+
 // --- Generation & Metadata Streaming ---
 
 async function generate(event) {
     const storyline = document.getElementById("story")?.value.trim();
     if (!storyline) return alert("Please enter a story idea.");
+
+    // CONTEXT INJECTION: Prepare character descriptions
+    let characterContext = "";
+    const listEl = document.getElementById("character-list"); // Used to find names if needed
+    // In a real app we'd store the full objects, for now we'll fetch them from the UI or state
+    // For simplicity, we'll just let the backend handle fetching the descriptions of the IDs we send
 
     const btn = event ? event.currentTarget : null;
     const screenplayEl = document.getElementById("screenplay");
@@ -173,7 +348,10 @@ async function generate(event) {
 
         const response = await fetch("/generate_story", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storyline })
+            body: JSON.stringify({
+                storyline,
+                character_ids: Array.from(selectedCharacterIds) // Send selected IDs for injection
+            })
         });
 
         if (!response.ok) throw new Error("Generation failed");
@@ -226,7 +404,24 @@ function download(format) {
     if (!screenplayText) return alert("No content to download.");
 
     if (format === 'txt') {
-        const blob = new Blob([screenplayText], { type: "text/plain" });
+        let content = "";
+
+        // Add Character Bible to TXT
+        if (selectedCharacterIds.size > 0) {
+            content += "=== CHARACTER BIBLE ===\n\n";
+            allCharacters.filter(c => selectedCharacterIds.has(c.id)).forEach(char => {
+                content += `${char.name.toUpperCase()}\n`;
+                content += `${char.description}\n`;
+                if (char.personality) content += `Personality: ${char.personality}\n`;
+                content += "\n";
+            });
+            content += "========================\n\n";
+        }
+
+        content += "=== SCREENPLAY ===\n\n";
+        content += screenplayText;
+
+        const blob = new Blob([content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url; a.download = "screenplay.txt"; a.click();
@@ -236,7 +431,10 @@ function download(format) {
     const endpoint = format === 'pdf' ? '/download_pdf' : '/download_docx';
     fetch(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ screenplay: screenplayText })
+        body: JSON.stringify({
+            screenplay: screenplayText,
+            character_ids: Array.from(selectedCharacterIds) // Include selected character IDs
+        })
     })
         .then(res => res.blob())
         .then(blob => {
