@@ -1,0 +1,19 @@
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+
+# IDE/settings
+.vscode/
+
+# Environment variables file (copy from .env.example)
+.env
+
+# MacOS
+.DS_Store
+
+# Logs
+*.log

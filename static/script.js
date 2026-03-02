@@ -417,6 +417,8 @@ function updateActiveCharBar(allChars) {
 // --- Generation & Metadata Streaming ---
 
 async function generate(event) {
+    const titleField = document.getElementById('story-title');
+    const customTitle = titleField ? titleField.value.trim() : "";
     const storyline = document.getElementById("story-input").value.trim();
     const location = document.getElementById("story-location").value.trim();
     const bgm = document.getElementById("story-bgm").value.trim();
@@ -482,6 +484,66 @@ async function generate(event) {
         alert(e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerText = "GENERATE CONTENT"; }
+    }
+}
+
+// --- Title suggestion ---
+async function suggestTitle() {
+    const storyline = document.getElementById("story-input")?.value.trim();
+    if (!storyline) return alert("Please enter a story idea first.");
+    const btn = event ? event.currentTarget : null;
+    try {
+        if (btn) { btn.disabled = true; btn.innerText = "⏳"; }
+        const res = await fetch("/suggest_title", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storyline })
+        });
+        const data = await res.json();
+        if (res.ok && data.title) {
+            const titleField = document.getElementById('story-title');
+            if (titleField) titleField.value = data.title;
+        } else {
+            alert(data.error || "Title suggestion failed.");
+        }
+    } catch (e) {
+        alert("Title suggestion error.");
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = "✨ Suggest Title"; }
+    }
+}
+
+// --- Translation ---
+async function translateScript() {
+    // clear title suggestion when translating? no change
+    const screenplayEl = document.getElementById("screenplay");
+    const targetLang = document.getElementById("target-lang")?.value;
+    if (!screenplayEl || !screenplayEl.innerText.trim()) {
+        return alert("Nothing to translate.");
+    }
+    if (!targetLang) {
+        return alert("Please select a target language.");
+    }
+
+    const btn = document.getElementById("translate-btn");
+    try {
+        if (btn) { btn.disabled = true; btn.innerText = "Translating..."; }
+        const res = await fetch("/translate_script", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script: screenplayEl.innerText, target_language: targetLang })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            // replace existing text with translation
+            screenplayEl.innerText = data.translated;
+        } else {
+            alert(data.error || "Translation failed.");
+        }
+    } catch (e) {
+        alert("Translation error.");
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = "Translate"; }
     }
 }
 

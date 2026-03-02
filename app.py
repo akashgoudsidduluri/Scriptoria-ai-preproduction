@@ -34,15 +34,36 @@ app.register_blueprint(auth_bp)
 # ─────────────────────────────────────────────────────────────
 
 def generate_title(prompt_text):
-    """Deterministic title generation from prompt (first few words)."""
-    words = prompt_text.split()
-    meaningful = [w for w in words if len(w) > 2][:6]
-    title = " ".join(meaningful)
-    if len(title) > 40:
-        title = title[:37] + "..."
-    if not title:
-        title = "Untitled Story"
-    return title.capitalize()
+    """Use AI to generate a concise, thematic 3-5 word title for the story.
+
+    Attempts to call the local Ollama model via `call_ollama`. Falls back to a
+    deterministic heuristic if the call fails or returns nothing useful.
+    """
+    prompt = f"""You are a master screenwriter. 
+Based ONLY on the following story idea, generate a short, punchy, cinematic title (3 to 5 words).
+Do not include any quotes, preambles, or explanations. Just output the title.
+
+Story Idea: {prompt_text}"""
+    try:
+        title = call_ollama(prompt).strip()
+        title = title.replace('"', '').replace('`', '').replace('*', '')
+        if not title:
+            raise ValueError("Empty title")
+        # Ensure it's not crazy long
+        if len(title) > 60:
+            title = title[:57] + "..."
+        return title
+    except Exception as e:
+        print(f"[TITLE GEN ERROR] {e}. Falling back to deterministic.")
+        # Fallback to simple heuristic
+        words = prompt_text.split()
+        meaningful = [w for w in words if len(w) > 2][:6]
+        title = " ".join(meaningful)
+        if len(title) > 40:
+            title = title[:37] + "..."
+        if not title:
+            title = "Untitled Story"
+        return title.capitalize()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -93,8 +114,45 @@ def call_ollama(prompt):
 
 
 # ─────────────────────────────────────────────────────────────
-# Core Routes
+# Helpers
 # ─────────────────────────────────────────────────────────────
+
+
+def translate_script_text(text, target_lang):
+    """Translate a block of text using an external translation API.
+
+    This helper currently uses the unofficial Google Translate JSON endpoint
+    which does not require an API key. The format is simple and works for
+    short/medium pieces of text; if you need an enterprise solution replace
+    this logic with your preferred provider.
+
+    The `target_lang` should be a two-letter ISO code (e.g. 'es', 'fr', 'hi').
+    """
+    if not text or not target_lang:
+        return ""
+
+    try:
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": target_lang,
+            "dt": "t",
+            "q": text
+        }
+        resp = requests.get(url, params=params, timeout=60)
+        resp.raise_for_status()
+        result = resp.json()
+        # result[0] is a list of translated segments
+        translated = "".join([seg[0] for seg in result[0] if seg and seg[0]])
+        return translated
+    except Exception as err:
+        raise Exception(f"Translation failed: {err}")
+
+
+# ─────────────────────────────────────────────────────────────
+# Core Routes
+# ─────────────────────────────────────────────
 
 @app.route('/')
 def index():
@@ -118,6 +176,7 @@ def generate_story():
     try:
         data = request.get_json(silent=True) or {}
         storyline = data.get("storyline", "").strip()
+        provided_title = data.get("title", "").strip()
         char_ids  = data.get("character_ids", [])
         location  = data.get("location", "").strip()
         bgm_tone  = data.get("bgm", "").strip()
@@ -130,16 +189,10 @@ def generate_story():
         # --- CONTEXT INJECTION (Character Profiles) ---
         character_blobs = []
         if user_id_fixed and char_ids:
-            from database import _get_client, DB_MODE
-            if DB_MODE == "local":
-                import local_db
-                for cid in char_ids:
-                    res = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                    if res: character_blobs.append(f"{res['name']}: {res['description']}. (Personality: {res.get('personality') or 'N/A'})")
-            else:
-                res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-                for char in res.data:
-                    character_blobs.append(f"{char['name']}: {char['description']}. (Personality: {char.get('personality') or 'N/A'})")
+            from database import _get_client
+            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+            for char in res.data:
+                character_blobs.append(f"{char['name']}: {char['description']}. (Personality: {char.get('personality') or 'N/A'})")
         
         char_context = "\n".join([f"- {blob}" for blob in character_blobs])
         
@@ -177,7 +230,11 @@ CRITICAL INSTRUCTIONS:
             # After generation, save to database and send metadata
             if user_id_fixed and full_text and not full_text.startswith("ERROR:"):
                 try:
-                    title = generate_title(storyline)
+                    # Use provided title if available, otherwise ask AI
+                    if provided_title:
+                        title = provided_title
+                    else:
+                        title = generate_title(storyline)
                     # Convert char_ids to JSON string for storage
                     char_ids_json = json.dumps(char_ids)
                     item = save_chat(user_id_fixed, storyline, full_text, 
@@ -202,6 +259,35 @@ CRITICAL INSTRUCTIONS:
 # ─────────────────────────────────────────────────────────────
 # History
 # ─────────────────────────────────────────────────────────────
+
+@app.route('/translate_script', methods=['POST'])
+@login_required
+
+def translate_script():
+    """Accepts screenplay text and a target language, returns translated text.
+
+    Request JSON should contain:
+      - script: original screenplay string
+      - target_language: two-letter ISO language code (e.g. "es", "fr")
+
+    Response JSON:
+      { "translated": "..." }
+    """
+    data = request.get_json(silent=True) or {}
+    script_text = (data.get("script") or "").strip()
+    target_lang = (data.get("target_language") or "").strip()
+
+    if not script_text:
+        return jsonify({"error": "Script text is required"}), 400
+    if not target_lang:
+        return jsonify({"error": "Target language is required"}), 400
+
+    try:
+        translated = translate_script_text(script_text, target_lang)
+        return jsonify({"translated": translated}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/history', methods=['GET'])
 @login_required
@@ -264,12 +350,27 @@ REQUIREMENTS:
 
         suggestion = call_ollama(prompt).strip()
         # Clean up any potential markdown or quotes
-        suggestion = suggestion.replace('"', '').replace('`', '').strip()
+        suggestion = suggestion.replace('"', '').replace('', '').strip()
         
         return jsonify({"suggestion": suggestion}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/suggest_title', methods=['POST'])
+@login_required
+def suggest_title():
+    """Return an AI‑generated title for a provided story idea."""
+    data = request.get_json(silent=True) or {}
+    storyline = (data.get("storyline") or "").strip()
+    if not storyline:
+        return jsonify({"error": "Storyline is required"}), 400
+    try:
+        title = generate_title(storyline)
+        return jsonify({"title": title}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/generate_character', methods=['POST'])
 @login_required
@@ -398,19 +499,13 @@ def download_pdf():
 
     # --- ADD CHARACTER PROFILES TO PDF ---
     if char_ids:
-        from database import _get_client, DB_MODE
+        from database import _get_client
         elements.append(Paragraph("CHARACTER PROFILES", styles["Heading1"]))
         elements.append(Spacer(1, 12))
         
         char_blobs = []
-        if DB_MODE == "local":
-            import local_db
-            for cid in char_ids:
-                char = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                if char: char_blobs.append(char)
-        else:
-            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-            char_blobs = res.data
+        res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+        char_blobs = res.data
             
         for char in char_blobs:
             elements.append(Paragraph(f"<b>{char['name']}</b>", styles["Heading3"]))
@@ -464,18 +559,12 @@ def download_docx():
         
     # --- ADD CHARACTER PROFILES TO DOCX ---
     if char_ids:
-        from database import _get_client, DB_MODE
+        from database import _get_client
         doc.add_heading('CHARACTER PROFILES', level=1)
         
         char_blobs = []
-        if DB_MODE == "local":
-            import local_db
-            for cid in char_ids:
-                char = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                if char: char_blobs.append(char)
-        else:
-            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-            char_blobs = res.data
+        res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+        char_blobs = res.data
             
         for char in char_blobs:
             p = doc.add_paragraph()
