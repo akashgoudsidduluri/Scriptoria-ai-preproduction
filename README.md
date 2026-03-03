@@ -1,6 +1,11 @@
 # Scriptoria
 
-Scriptoria is a Flask-based web application that integrates with Supabase for backend services. It includes authentication, Supabase-backed persistence, and front-end templates for a simple dashboard.
+Scriptoria is a Flask-based web application that uses **Supabase as a managed PostgreSQL database** and **Ollama (granite4:micro)** for local AI screenplay generation.
+
+Supabase Auth is **not used**.  
+Authentication and session management are handled entirely in Flask.
+
+---
 
 ## 📦 Project Structure
 
@@ -8,203 +13,245 @@ Scriptoria is a Flask-based web application that integrates with Supabase for ba
 app.py
 auth.py
 database.py
+supabase_schema.sql
+requirements.txt
+.env.example
+
 static/
   ├─ script.js
   └─ style.css
+
 templates/
-  ├─ dashboard.html
-  └─ index.html
-supabase_schema.sql
-requirements.txt
+  ├─ index.html
+  └─ dashboard.html
 ```
+
+---
+
+## 🏗 Architecture
+
+- Flask = backend server
+- Supabase = hosted PostgreSQL database
+- Ollama = local LLM inference
+- `service_role` key = server-side only
+- No client-side database access
+- No Supabase Auth
+
+The frontend never communicates directly with Supabase.
+
+---
 
 ## 🚀 Getting Started
 
-1. **Clone the repository**
+### 1️⃣ Clone repository
 
 ```bash
 git clone <repo-url>
 cd scriptoria
 ```
 
-2. **Create a virtual environment**
+---
 
+### 2️⃣ Create virtual environment
+
+**Windows**
 ```bash
 python -m venv venv
-source venv/Scripts/activate      # Windows
-# or:
-# source venv/bin/activate        # macOS/Linux
-```
-
-3. **Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-4. **Environment configuration**
-
-- Copy `.env.example` to `.env` and fill in your own values.
-- Make sure `FLASK_SECRET_KEY` is set to a secure random string.
-
-```bash
-cp .env.example .env
-# edit .env accordingly
-```
-
-5. **Setup ollama (AI model)**
-
-This project uses Ollama with the `granite4:micro` model for local inference. Install Ollama from https://ollama.com and then pull the model:
-
-```bash
-ollama pull granite4:micro
-```
-
-6. **Run the application**
-
-```bash
-python app.py
-```
-
-> The server listens on port 5000 by default. Open your browser and go to:
->
-> ```text
-> http://localhost:5000
-> ```
->
-> You should see the landing page where you can log in or sign up.
-
-### 🔍 Using the web interface
-
-1. **Authenticate** – register a new user or log in with existing credentials. Session data is stored in Supabase.
-2. **Create characters** (optional) from the dashboard; they will be associated with your account.
-3. **Generate a screenplay**
-   - Click **"New Story"** (or similar button).
-   - Enter a story idea, select characters, choose location/BGM tone, and hit **Generate**.
-   - The screenplay text will appear streaming in real time (powered by Ollama).
-4. **Export options** – once generated you can download the screenplay as PDF or DOCX via the provided buttons.
-
-If you need to view logs or troubleshoot, check the console where `python app.py` is running; database operations and AI prompts are logged there.
-
-## 🛠 Development Tips
-
-- Database: All data lives in Supabase; ensure your project URL/key are configured and the schema (from `supabase_schema.sql`) has been applied.
-- Static files are under `static/`; HTML templates reside in `templates/`.
-
-## ⚙️ Detailed setup & deployment
-
-Follow these steps to get a reproducible development environment and to deploy or share the project with others.
-
-1. Create and activate a virtual environment
-
-```bash
-python -m venv venv
-# Windows
 venv\Scripts\activate
-# macOS / Linux
+```
+
+**macOS / Linux**
+```bash
+python -m venv venv
 source venv/bin/activate
 ```
 
-2. Install Python dependencies
+---
+
+### 3️⃣ Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Configure environment variables (DO NOT commit `.env`)
+---
 
-- Copy the example file and fill in your Supabase values and `FLASK_SECRET_KEY`:
+### 4️⃣ Configure environment variables
+
+Copy the example file:
 
 ```bash
 copy .env.example .env   # Windows
-cp .env.example .env     # macOS / Linux
-# Edit .env to add your SUPABASE_URL and SUPABASE_SERVICE_KEY
+# or
+cp .env.example .env     # macOS/Linux
 ```
 
-Notes:
-- Never commit secrets. `.gitignore` excludes `.env` by default.
-- Use the Supabase **service_role** (server-side) key only for server processes — never leak it to the browser or client-side code.
+Edit `.env`:
 
-4. Pull the Ollama model (if using local LLM inference)
+```
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key
+FLASK_SECRET_KEY=your_long_random_secret
+```
+
+Generate a proper Flask secret:
+
+```python
+import secrets
+print(secrets.token_hex(32))
+```
+
+### ⚠️ Critical Security Rules
+
+- Never commit `.env`
+- Never expose `SUPABASE_SERVICE_KEY` to frontend
+- If service_role key is leaked, regenerate immediately in Supabase dashboard
+- Only backend uses Supabase
+
+---
+
+### 5️⃣ Apply database schema
+
+Open Supabase dashboard → SQL Editor  
+Paste contents of `supabase_schema.sql`  
+Click **Run**
+
+This creates required tables:
+
+- users
+- sessions
+- chat_history
+- characters
+
+---
+
+### 6️⃣ Setup Ollama (local LLM)
+
+Install Ollama:
+
+https://ollama.com
+
+Pull model:
 
 ```bash
 ollama pull granite4:micro
 ```
 
-5. Apply the database schema in Supabase
+---
 
-Options:
-- Use the Supabase Dashboard → SQL Editor: open `supabase_schema.sql` and run the statements.
-- Or use a DB client/psql with your Supabase DB connection string to run the `supabase_schema.sql` file.
-
-Why keep `supabase_schema.sql` in the repo?
-- Yes — keep and commit this file. It documents the table definitions and is essential for reproducible setup, CI, and for teammates or deploy scripts.
-
-6. Start the app
+### 7️⃣ Run application
 
 ```bash
 python app.py
 ```
 
-Open `http://localhost:5000` and follow the UI flow described earlier.
+Open:
 
-## ✅ What to commit (recommended)
-
-- Project source code: `app.py`, `auth.py`, `database.py`, `static/`, `templates/`, `requirements.txt`
-- SQL schema: `supabase_schema.sql` (yes — commit this)
-
-Optional: use a `migrations/` folder
-
-- If you plan to evolve the schema, consider converting `supabase_schema.sql` into a set of incremental migration files under a `migrations/` directory and commit those instead (or alongside) the single SQL dump.
-- Using migrations makes upgrades and rollbacks safer and easier in CI or production deployments. You can use the Supabase Migrations workflow or any migration tool you prefer.
-
-Quick options to apply the schema:
-
-- Supabase Dashboard: open `supabase_schema.sql` in the SQL editor and run it.
-- Supabase CLI / migrations: follow Supabase docs to apply migration files from `migrations/`.
-
-Why commit the schema/migrations?
-- It documents the DB shape, lets teammates and CI set up databases reproducibly, and provides a source of truth for reviews.
-- Documentation: `README.md`, `.env.example`
-
-Do NOT commit:
-
-- Secrets and environment files: `.env`
-- Virtual environment: `venv/`
-- Python bytecode and caches: `__pycache__/`, `*.pyc`
-- Local-only artifacts and logs: `*.log`, OS files like `.DS_Store`
-
-## 🔁 Typical git workflow
-
-```bash
-# create a branch
-git checkout -b supabase-only
-
-# stage changes
-git add .
-
-# commit (use a meaningful message)
-git commit -m "Switch to Supabase-only backend; update docs"
-
-# push branch to remote
-git push -u origin supabase-only
-
-# open a PR on GitHub/GitLab for review before merging to main
 ```
-
-If you are ready to update `main` directly and you have permissions:
-
-```bash
-git checkout main
-git merge supabase-only
-git push origin main
+http://localhost:5000
 ```
-
-## 📄 Additional Notes
-
-- `.gitignore` includes Python artifacts, environment files, IDE settings, and logs to keep the repository clean.
-- For Supabase setup, refer to the Supabase documentation and ensure service keys are never exposed publicly.
 
 ---
 
-Feel free to contribute or report issues! 😊
+## 🔍 Using the App
+
+1. Register or log in
+2. Create character profiles (optional)
+3. Generate screenplay ideas
+4. AI responses stream live via Ollama
+5. Export screenplay as PDF or DOCX
+
+---
+
+## 🗄 Database Notes
+
+- Supabase is used only as PostgreSQL.
+- Supabase Auth is not used.
+- `service_role` key bypasses RLS.
+- RLS may remain enabled; it does not affect service_role access.
+
+---
+
+## 🛠 Production Deployment
+
+The built-in Flask server is for development only.
+
+For production:
+
+```bash
+gunicorn app:app
+```
+
+Set environment variables in your hosting platform (Render, Railway, etc.).  
+Do not rely on `.env` in production.
+
+---
+
+## ✅ What to Commit
+
+Commit:
+
+- Source code
+- `supabase_schema.sql`
+- `requirements.txt`
+- `.env.example`
+- README.md
+
+Do NOT commit:
+
+- `.env`
+- `venv/`
+- `__pycache__/`
+- `*.pyc`
+- Logs
+
+---
+
+## 🔁 Git Workflow
+
+Create branch:
+
+```bash
+git checkout -b supabase-only
+```
+
+Commit changes:
+
+```bash
+git add .
+git commit -m "Implement Supabase backend with service_role"
+git push -u origin supabase-only
+```
+
+Merge to main when ready.
+
+---
+
+## 🔐 Security Model
+
+- Backend fully trusted
+- service_role key stored server-side only
+- Manual password hashing in Flask
+- Session management handled in Flask
+- Entire database accessible to backend
+
+If the server is compromised, the database is compromised.
+
+For stricter production security:
+- Implement RLS policies
+- Use JWT verification
+- Consider Supabase Auth
+
+---
+
+## 📌 Summary
+
+Scriptoria uses:
+
+- Flask for backend logic
+- Supabase as managed PostgreSQL
+- service_role key (server-only)
+- Ollama for local AI inference
+
+No direct client database access.  
+No Supabase Auth.
