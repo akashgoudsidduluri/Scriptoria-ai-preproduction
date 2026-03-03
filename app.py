@@ -189,16 +189,10 @@ def generate_story():
         # --- CONTEXT INJECTION (Character Profiles) ---
         character_blobs = []
         if user_id_fixed and char_ids:
-            from database import _get_client, DB_MODE
-            if DB_MODE == "local":
-                import local_db
-                for cid in char_ids:
-                    res = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                    if res: character_blobs.append(f"{res['name']}: {res['description']}. (Personality: {res.get('personality') or 'N/A'})")
-            else:
-                res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-                for char in res.data:
-                    character_blobs.append(f"{char['name']}: {char['description']}. (Personality: {char.get('personality') or 'N/A'})")
+            from database import _get_client
+            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+            for char in res.data:
+                character_blobs.append(f"{char['name']}: {char['description']}. (Personality: {char.get('personality') or 'N/A'})")
         
         char_context = "\n".join([f"- {blob}" for blob in character_blobs])
         
@@ -505,19 +499,13 @@ def download_pdf():
 
     # --- ADD CHARACTER PROFILES TO PDF ---
     if char_ids:
-        from database import _get_client, DB_MODE
+        from database import _get_client
         elements.append(Paragraph("CHARACTER PROFILES", styles["Heading1"]))
         elements.append(Spacer(1, 12))
         
         char_blobs = []
-        if DB_MODE == "local":
-            import local_db
-            for cid in char_ids:
-                char = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                if char: char_blobs.append(char)
-        else:
-            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-            char_blobs = res.data
+        res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+        char_blobs = res.data
             
         for char in char_blobs:
             elements.append(Paragraph(f"<b>{char['name']}</b>", styles["Heading3"]))
@@ -571,18 +559,12 @@ def download_docx():
         
     # --- ADD CHARACTER PROFILES TO DOCX ---
     if char_ids:
-        from database import _get_client, DB_MODE
+        from database import _get_client
         doc.add_heading('CHARACTER PROFILES', level=1)
         
         char_blobs = []
-        if DB_MODE == "local":
-            import local_db
-            for cid in char_ids:
-                char = local_db._run_query("SELECT * FROM characters WHERE id = ?", (cid,), fetch_one=True)
-                if char: char_blobs.append(char)
-        else:
-            res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
-            char_blobs = res.data
+        res = _get_client().table("characters").select("*").in_("id", char_ids).execute()
+        char_blobs = res.data
             
         for char in char_blobs:
             p = doc.add_paragraph()

@@ -20,7 +20,6 @@ if SUPABASE_URL:
     os.environ["NO_PROXY"] = f"{domain},localhost,127.0.0.1"
 
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-DB_MODE = os.environ.get("DB_MODE", "supabase").lower()
 
 _supabase_client: Client | None = None
 
@@ -48,10 +47,6 @@ def _get_client() -> Client:
 # ─────────────────────────────────────────────────────────────
 
 def create_user(username: str, email: str, password_hash: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.create_user(username, email, password_hash)
-    
     try:
         start = time.time()
         result = _get_client().table("users").insert({
@@ -63,10 +58,6 @@ def create_user(username: str, email: str, password_hash: str):
         raise e
 
 def get_user_by_email(email: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.get_user_by_email(email)
-    
     try:
         start = time.time()
         result = _get_client().table("users").select("*").eq("email", email).limit(1).execute()
@@ -76,10 +67,6 @@ def get_user_by_email(email: str):
         raise e
 
 def get_user_by_id(user_id: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.get_user_by_id(user_id)
-    
     try:
         result = _get_client().table("users").select("*").eq("id", user_id).limit(1).execute()
         return result.data[0] if result.data else None
@@ -87,10 +74,6 @@ def get_user_by_id(user_id: str):
         raise e
 
 def create_session(user_id: str, session_token: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.create_session(user_id, session_token)
-    
     try:
         start = time.time()
         result = _get_client().table("sessions").insert({
@@ -102,10 +85,6 @@ def create_session(user_id: str, session_token: str):
         raise e
 
 def get_session(session_token: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.get_session(session_token)
-    
     try:
         start = time.time()
         result = _get_client().table("sessions").select("*, users(*)").eq("session_token", session_token).gt("expires_at", "now()").limit(1).execute()
@@ -115,17 +94,9 @@ def get_session(session_token: str):
         raise e
 
 def delete_session(session_token: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.delete_session(session_token)
-    
     _get_client().table("sessions").delete().eq("session_token", session_token).execute()
 
 def save_chat(user_id: str, prompt: str, response: str, title: str = None, location: str = None, bgm: str = None, char_ids: str = None):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.save_chat(user_id, prompt, response, title, location, bgm, char_ids)
-    
     try:
         start = time.time()
         result = _get_client().table("chat_history").insert({
@@ -144,10 +115,6 @@ def save_chat(user_id: str, prompt: str, response: str, title: str = None, locat
         return None
 
 def get_chat_history(user_id: str, limit: int = 20):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.get_chat_history(user_id, limit)
-    
     try:
         start = time.time()
         result = _get_client().table("chat_history").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
@@ -157,12 +124,6 @@ def get_chat_history(user_id: str, limit: int = 20):
         return []
 
 def update_chat_title(chat_id: str, user_id: str, new_title: str):
-    if DB_MODE == "local":
-        # SQLite implementation (minimal for rename)
-        import local_db
-        local_db._run_query("UPDATE chat_history SET title = ? WHERE id = ? AND user_id = ?", (new_title, chat_id, user_id))
-        return {"id": chat_id, "title": new_title}
-    
     result = _get_client().table("chat_history").update({"title": new_title}).eq("id", chat_id).eq("user_id", user_id).execute()
     return result.data[0] if result.data else None
 
@@ -172,9 +133,6 @@ def update_chat_title(chat_id: str, user_id: str, new_title: str):
 
 def save_character(user_id: str, name: str, description: str, personality: str = None):
     try:
-        if DB_MODE == "local":
-            import local_db
-            return local_db.save_character(user_id, name, description, personality)
         start = time.time()
         result = _get_client().table("characters").insert({
             "user_id": user_id, 
@@ -187,15 +145,11 @@ def save_character(user_id: str, name: str, description: str, personality: str =
     except Exception as e:
         err_msg = str(e)
         if "public.characters" in err_msg:
-            err_msg = "Table 'characters' missing in Supabase. Please run the SQL in supabase_schema.sql or switch to DB_MODE=local in .env"
+            err_msg = "Table 'characters' missing in Supabase. Please run the SQL in supabase_schema.sql"
         print(f"[DB ERROR] save_character failed: {err_msg}")
         return f"Database error: {err_msg}"
 
 def get_characters(user_id: str):
-    if DB_MODE == "local":
-        import local_db
-        return local_db.get_characters(user_id)
-    
     try:
         start = time.time()
         result = _get_client().table("characters").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
@@ -207,9 +161,6 @@ def get_characters(user_id: str):
 
 def delete_character(char_id: str, user_id: str):
     try:
-        if DB_MODE == "local":
-            import local_db
-            return local_db.delete_character(char_id, user_id)
         _get_client().table("characters").delete().eq("id", char_id).eq("user_id", user_id).execute()
     except Exception as e:
         err_msg = str(e)

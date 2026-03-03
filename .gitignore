@@ -1,12 +1,42 @@
-# Python artifacts
+# Python bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# Virtual environment
+# Virtual environments
 venv/
+.env/
+.venv/
+env/
+ENV/
 
-# Local database
-scriptoria_local.db
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
 
-# IDE/settings
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# IDEs
 .vscode/
+.idea/
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
